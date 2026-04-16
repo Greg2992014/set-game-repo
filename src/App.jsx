@@ -8,14 +8,15 @@ import { useAbly } from './useAbly.js';
 import { deserializeCards, hasSetOnBoard } from './deck.js';
 
 export default function App() {
-  const [session, setSession] = useState(null); // { mode, role, roomCode, name, playerId }
+  console.log('[DIAG] App render');
+  const [session, setSession] = useState(null);
   const [names, setNames] = useState({});
   const [showRules, setShowRules] = useState(false);
   const [partnerReady, setPartnerReady] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  // ------ Multiplayer messaging ------
   const handleRemoteMessage = useCallback((event, data) => {
+    console.log('[DIAG] handleRemoteMessage', event, data);
     if (event === 'state') {
       applyRemoteState(data);
     } else if (event === 'name') {
@@ -31,6 +32,7 @@ export default function App() {
     session?.playerId,
     handleRemoteMessage
   );
+  console.log('[DIAG] Ably connected:', connected);
 
   const publishFn = session?.mode === 'multi' ? publish : null;
 
@@ -38,77 +40,71 @@ export default function App() {
     gs, selected, hint, flash, locked, currentTime, formatTime,
     initGame, applyRemoteState, toggleCard, addThreeCards, showHint, getStats,
   } = useGameState(session?.playerId, publishFn);
+  console.log('[DIAG] gameState gs:', gs ? 'exists' : 'null');
 
-  // ------ Session start ------
   const handleStart = useCallback((cfg) => {
+    console.log('[DIAG] handleStart', cfg);
     setSession(cfg);
     setNames({ [cfg.playerId]: cfg.name });
     setPartnerReady(cfg.mode === 'solo');
   }, []);
 
-  // После подключения к Ably — анонсируем себя и стартуем игру если хост
   useEffect(() => {
+    console.log('[DIAG] useEffect [connected, session]', { connected, session });
     if (!session || session.mode !== 'multi' || !connected) return;
-
+    console.log('[DIAG] publishing name');
     publish('name', { playerId: session.playerId, name: session.name });
-
     if (session.role === 'host') {
-      // Хост инициализирует состояние
+      console.log('[DIAG] host: will init game');
       setTimeout(() => {
         const state = initGame();
-        // Ещё раз отправим после небольшой задержки чтоб гость получил
+        console.log('[DIAG] host: game initialized', state);
         setTimeout(() => publish('state', state), 500);
       }, 800);
     }
   }, [connected, session]);
 
-  // Для гостя — ждём state от хоста (initGame вызовется через applyRemoteState)
-  // Но нам нужно показать имя гостя хосту
   useEffect(() => {
     if (!session || session.mode !== 'multi' || !gs) return;
     if (session.role === 'guest' && !partnerReady) {
+      console.log('[DIAG] guest publishing name');
       publish('name', { playerId: session.playerId, name: session.name });
     }
   }, [gs, session]);
 
-  // Статус-сообщения
   useEffect(() => {
     if (!gs) return;
+    console.log('[DIAG] status update, gameOver:', gs.gameOver, 'locked:', locked);
     if (gs.gameOver) { setStatusMsg(''); return; }
     const board = deserializeCards(gs.boardIds);
     const hasSet = hasSetOnBoard(board);
-    if (locked) {
-      setStatusMsg('⚠️ Ошибка! Пауза 2 сек...');
-    } else if (!hasSet && gs.deckIds.length === 0) {
-      setStatusMsg('Нет сетов на поле и колода пуста!');
-    } else if (!hasSet) {
-      setStatusMsg('Нет сета на поле — добавь карты!');
-    } else if (selected.length > 0) {
-      setStatusMsg(`Выбрано: ${selected.length}/3`);
-    } else {
-      setStatusMsg('Найди набор из 3 карт!');
-    }
+    if (locked) setStatusMsg('⚠️ Ошибка! Пауза 2 сек...');
+    else if (!hasSet && gs.deckIds.length === 0) setStatusMsg('Нет сетов на поле и колода пуста!');
+    else if (!hasSet) setStatusMsg('Нет сета на поле — добавь карты!');
+    else if (selected.length > 0) setStatusMsg(`Выбрано: ${selected.length}/3`);
+    else setStatusMsg('Найди набор из 3 карт!');
   }, [gs, locked, selected]);
 
   const handleNewGame = () => {
-    if (session?.mode === 'multi') {
-      publish('new_game', {});
-    }
+    console.log('[DIAG] handleNewGame');
+    if (session?.mode === 'multi') publish('new_game', {});
     initGame();
   };
 
   const handleLobby = () => {
+    console.log('[DIAG] handleLobby');
     setSession(null);
-    setGs && setNames({});
+    setNames({});
     setPartnerReady(false);
   };
 
-  // ------ Render ------
   if (!session) {
+    console.log('[DIAG] render Lobby');
     return <Lobby onStart={handleStart} />;
   }
 
   if (!gs) {
+    console.log('[DIAG] render loading screen, gs is null');
     return (
       <div className="loading-screen">
         <div className="loading-logo">SET</div>

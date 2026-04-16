@@ -1,52 +1,49 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  createInitialGameState, deserializeCards, isValidSet,
-  hasSetOnBoard, findRandomSet, deserializeCard,
-} from './deck.js';
-
-/**
- * Центральный хук управления состоянием игры.
- * Работает для одиночного и мультиплеера.
- * publish — функция отправки события через Ably (null в одиночном режиме).
- */
 export function useGameState(playerId, publish = null) {
-  const [gs, setGs] = useState(null); // game state (serialized form)
-  const [selected, setSelected] = useState([]); // текущие выбранные карты (ids)
-  const [hint, setHint] = useState(null); // id карты-подсказки
-  const [flash, setFlash] = useState(null); // { ids, type: 'correct'|'incorrect' }
-  const [locked, setLocked] = useState(false); // блокировка после ошибки
+  console.log('[DIAG] useGameState hook, playerId:', playerId, 'publish:', !!publish);
+  const [gs, setGs] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [hint, setHint] = useState(null);
+  const [flash, setFlash] = useState(null);
+  const [locked, setLocked] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const timerRef = useRef(null);
   const lockedRef = useRef(false);
 
-  // Старт нового таймера
   const startTimer = useCallback((startTime) => {
+    console.log('[DIAG] startTimer', startTime);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCurrentTime(Math.floor((Date.now() - startTime) / 1000));
     }, 500);
   }, []);
 
-  // Инициализация новой игры
   const initGame = useCallback(() => {
-    const state = createInitialGameState();
-    setGs(state);
-    setSelected([]);
-    setHint(null);
-    setFlash(null);
-    setLocked(false);
-    lockedRef.current = false;
-    setCurrentTime(0);
-    startTimer(state.startTime);
-    // Синхронизируем партнёру
-    if (publish) publish('state', state);
-    return state;
+    console.log('[DIAG] initGame called');
+    try {
+      const state = createInitialGameState();
+      console.log('[DIAG] initGame state created', state);
+      setGs(state);
+      setSelected([]);
+      setHint(null);
+      setFlash(null);
+      setLocked(false);
+      lockedRef.current = false;
+      setCurrentTime(0);
+      startTimer(state.startTime);
+      if (publish) {
+        console.log('[DIAG] publishing state');
+        publish('state', state);
+      }
+      return state;
+    } catch (err) {
+      console.error('[DIAG] initGame error', err);
+      return null;
+    }
   }, [publish, startTimer]);
 
-  // Получить новое состояние извне (от партнёра)
   const applyRemoteState = useCallback((state) => {
+    console.log('[DIAG] applyRemoteState', state);
     setGs(prev => {
-      // Принимаем только если версия новее
       if (!prev || state.version >= prev.version) {
         if (state.startTime !== prev?.startTime) {
           startTimer(state.startTime);

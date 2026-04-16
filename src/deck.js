@@ -74,17 +74,25 @@ export function deserializeCards(ids) { return ids.map(deserializeCard); }
 
 // Создать начальное состояние игры (сериализованное)
 export function createInitialGameState() {
-  const deck = shuffleDeck(generateDeck());
-  const board = deck.splice(0, 12);
-  return {
-    deckIds: deck.map(c => c.id),
-    boardIds: board.map(c => c.id),
-    scores: { player1: 0, player2: 0 },
-    errors: { player1: 0, player2: 0 },
-    setTimes: { player1: [], player2: [] },
-    startTime: Date.now(),
-    lastSetTime: Date.now(),
-    gameOver: false,
-    version: 0, // optimistic lock
-  };
+  console.log('[DIAG] createInitialGameState');
+  try {
+    const deck = shuffleDeck(generateDeck());
+    const board = deck.splice(0, 12);
+    const state = {
+      deckIds: deck.map(c => c.id),
+      boardIds: board.map(c => c.id),
+      scores: { player1: 0, player2: 0 },
+      errors: { player1: 0, player2: 0 },
+      setTimes: { player1: [], player2: [] },
+      startTime: Date.now(),
+      lastSetTime: Date.now(),
+      gameOver: false,
+      version: 0,
+    };
+    console.log('[DIAG] state created, board length:', state.boardIds.length, 'deck length:', state.deckIds.length);
+    return state;
+  } catch (err) {
+    console.error('[DIAG] createInitialGameState error', err);
+    throw err;
+  }
 }
