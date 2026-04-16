@@ -3,6 +3,12 @@ import Ably from 'ably';
 
 const ABLY_KEY = import.meta.env.VITE_ABLY_KEY;
 
+// Определение мобильного устройства по User-Agent
+const isMobile = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 export function useAbly(roomCode, playerId, onMessage) {
   const clientRef = useRef(null);
   const channelRef = useRef(null);
@@ -18,16 +24,21 @@ export function useAbly(roomCode, playerId, onMessage) {
     let isMounted = true;
     let retryCount = 0;
 
-    // Конфигурация с WebSocket и fallback-хостами
+    // На мобильных устройствах используем только xhr_polling (WebSocket часто блокируется)
+    const useOnlyXhr = isMobile();
+    const transports = useOnlyXhr ? ['xhr_polling'] : ['web_socket', 'xhr_polling'];
+    
+    console.log('[Ably] initializing, transports:', transports, 'mobile:', useOnlyXhr);
+
     const client = new Ably.Realtime({
       key: ABLY_KEY,
       clientId: playerId,
-      transports: ['web_socket', 'xhr_polling'],
+      transports: transports,
       fallbackHosts: ['a.ably-realtime.com', 'b.ably-realtime.com', 'c.ably-realtime.com'],
-      timeout: 20000,
-      realtimeRequestTimeout: 20000,
+      timeout: 30000,
+      realtimeRequestTimeout: 30000,
       disconnectedRetryTimeout: 3000,
-      suspendedRetryTimeout: 10000,
+      suspendedRetryTimeout: 15000,
       httpMaxRetryCount: 5,
       connectivityCheckUrl: null,
       autoConnect: true,
@@ -35,6 +46,11 @@ export function useAbly(roomCode, playerId, onMessage) {
     });
 
     clientRef.current = client;
+
+    const handleConnecting = () => {
+      if (!isMounted) return;
+      console.log('[Ably] connecting...');
+    };
 
     const handleConnected = () => {
       if (!isMounted) return;
@@ -50,13 +66,14 @@ export function useAbly(roomCode, playerId, onMessage) {
       if (!isMounted) return;
       console.log('[Ably] disconnected', reason);
       setConnected(false);
-      // Автоматическая попытка переподключения
       if (retryCount < 5) {
+        const delay = 3000 * Math.pow(1.5, retryCount);
         setTimeout(() => {
           if (isMounted && client.connection.state !== 'connected') {
+            console.log('[Ably] retry connecting...');
             client.connect();
           }
-        }, 3000 * Math.pow(1.5, retryCount));
+        }, delay);
         retryCount++;
       }
     };
@@ -67,6 +84,7 @@ export function useAbly(roomCode, playerId, onMessage) {
       setConnected(false);
     };
 
+    client.connection.on('connecting', handleConnecting);
     client.connection.on('connected', handleConnected);
     client.connection.on('disconnected', handleDisconnected);
     client.connection.on('failed', handleFailed);
