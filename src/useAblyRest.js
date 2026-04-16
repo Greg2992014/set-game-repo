@@ -9,7 +9,7 @@ export function useAblyRest(roomCode, playerId, onMessage) {
   const clientRef = useRef(null);
   const channelRef = useRef(null);
   const intervalRef = useRef(null);
-  const lastProcessedRef = useRef({}); // для дедупликации сообщений
+  const lastProcessedRef = useRef({});
 
   useEffect(() => {
     if (!roomCode) return;
@@ -19,12 +19,19 @@ export function useAblyRest(roomCode, playerId, onMessage) {
     }
 
     let isMounted = true;
-    const client = new Ably.Rest({ key: ABLY_KEY });
+
+    const client = new Ably.Rest({
+      key: ABLY_KEY,
+      timeout: 120000,               // 2 минуты на запрос
+      httpMaxRetryCount: 3,
+      httpMaxRetryDuration: 60000,
+      fallbackHosts: [],             // отключаем fallback (они только замедляют)
+    });
     clientRef.current = client;
     const channel = client.channels.get(`set-game-${roomCode}`);
     channelRef.current = channel;
     setConnected(true);
-    console.log('[AblyRest] Connected (REST mode)');
+    console.log('[AblyRest] Connected (REST mode, long timeout)');
 
     const poll = async () => {
       if (!isMounted) return;
@@ -36,11 +43,11 @@ export function useAblyRest(roomCode, playerId, onMessage) {
           if (lastProcessedRef.current[msgKey]) continue;
           lastProcessedRef.current[msgKey] = true;
           if (msg.clientId !== playerId) {
-            console.log('[AblyRest] Received:', msg.name, msg.data);
+            console.log('[AblyRest] Received:', msg.name);
             onMessage(msg.name, msg.data);
           }
         }
-        // Очистка старых ключей (чтобы не раздувать память)
+        // очистка старых ключей
         const keys = Object.keys(lastProcessedRef.current);
         if (keys.length > 100) {
           const toDelete = keys.slice(0, keys.length - 50);
@@ -51,8 +58,8 @@ export function useAblyRest(roomCode, playerId, onMessage) {
       }
     };
 
-    intervalRef.current = setInterval(poll, 2000);
-    poll(); // сразу первый опрос
+    intervalRef.current = setInterval(poll, 5000); // опрос каждые 5 секунд
+    poll();
 
     return () => {
       isMounted = false;
