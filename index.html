@@ -6,10 +6,22 @@
     <title>Set — Мультиплеер</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Подавление ошибок Eruda, если он не инициализирован
+      if (typeof window.eruda !== "undefined" && !window.eruda._initCalled) {
+        window.eruda.init = function () {
+          console.log("Eruda suppressed");
+        };
+        window.eruda._initCalled = true;
+      }
+    </script>
   </body>
 </html>

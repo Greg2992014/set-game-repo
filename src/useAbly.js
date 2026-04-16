@@ -1,10 +1,8 @@
-// src/useAbly.js
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Ably from 'ably';
 
 const ABLY_KEY = import.meta.env.VITE_ABLY_KEY;
 
-// Определение мобильного устройства по User-Agent
 const isMobile = () => {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
@@ -25,22 +23,29 @@ export function useAbly(roomCode, playerId, onMessage) {
       return;
     }
     if (!ABLY_KEY) {
-      console.error('[Ably] FATAL: VITE_ABLY_KEY is not set in environment');
+      console.error('[Ably] FATAL: VITE_ABLY_KEY is not set');
       return;
     }
 
     let isMounted = true;
     let retryCount = 0;
 
-    // На мобильных устройствах используем только xhr_polling (WebSocket часто блокируется)
-    const useOnlyXhr = isMobile();
-    const transports = useOnlyXhr ? ['xhr_polling'] : ['web_socket', 'xhr_polling'];
-    
+    const mobile = isMobile();
+    // Пробуем WebSocket, если не получится – позже переключимся на xhr_polling
+    const transports = mobile ? ['web_socket', 'xhr_polling'] : ['web_socket', 'xhr_polling'];
+    // Увеличенные таймауты для мобильных
+    const timeout = mobile ? 60000 : 30000;
+    const realtimeRequestTimeout = mobile ? 60000 : 30000;
+    const httpRequestTimeout = mobile ? 60000 : 10000;
+
     console.log('[Ably] Initializing with:', {
       roomCode,
       playerId,
       transports,
-      useOnlyXhr,
+      mobile,
+      timeout,
+      realtimeRequestTimeout,
+      httpRequestTimeout,
       ABLY_KEY_prefix: ABLY_KEY.substring(0, 10) + '...',
     });
 
@@ -49,20 +54,20 @@ export function useAbly(roomCode, playerId, onMessage) {
       clientId: playerId,
       transports: transports,
       fallbackHosts: ['a.ably-realtime.com', 'b.ably-realtime.com', 'c.ably-realtime.com'],
-      timeout: 30000,
-      realtimeRequestTimeout: 30000,
-      disconnectedRetryTimeout: 3000,
-      suspendedRetryTimeout: 15000,
+      timeout: timeout,
+      realtimeRequestTimeout: realtimeRequestTimeout,
+      disconnectedRetryTimeout: mobile ? 5000 : 3000,
+      suspendedRetryTimeout: mobile ? 20000 : 15000,
       httpMaxRetryCount: 5,
-      connectivityCheckUrl: null, // отключаем лишние проверки
+      connectivityCheckUrl: null,
       autoConnect: true,
       queueMessages: true,
-      log: { level: 4 }, // максимальный уровень логирования Ably (если поддерживается)
+      // Дополнительные опции для улучшения соединения на мобильных
+      ...(mobile && { transportParams: { heartbeatInterval: 15000 } })
     });
 
     clientRef.current = client;
 
-    // ---- Подробные обработчики состояния соединения ----
     const handleConnecting = () => {
       if (!isMounted) return;
       console.log('[Ably] State: CONNECTING (connection state =', client.connection.state, ')');
@@ -83,16 +88,17 @@ export function useAbly(roomCode, playerId, onMessage) {
     const handleDisconnected = (reason) => {
       if (!isMounted) return;
       console.warn('[Ably] State: DISCONNECTED', {
-        reason: reason ? (reason.message || reason) : 'no reason',
+        message: reason?.message,
         code: reason?.code,
         statusCode: reason?.statusCode,
-        retryCount,
+        toString: reason?.toString?.(),
+        stack: reason?.stack,
+        raw: reason,
       });
       setConnected(false);
       setDetailedError(reason);
-      // Экспоненциальная задержка для повторных попыток
       if (retryCount < 5) {
-        const delay = 3000 * Math.pow(1.5, retryCount);
+        const delay = (mobile ? 5000 : 3000) * Math.pow(1.5, retryCount);
         console.log(`[Ably] Will retry connection in ${delay}ms (attempt ${retryCount + 1})`);
         setTimeout(() => {
           if (isMounted && client.connection.state !== 'connected') {
@@ -109,38 +115,29 @@ export function useAbly(roomCode, playerId, onMessage) {
     const handleFailed = (err) => {
       if (!isMounted) return;
       console.error('[Ably] State: FAILED', {
-        error: err ? (err.message || err) : 'unknown',
+        message: err?.message,
         code: err?.code,
         statusCode: err?.statusCode,
+        stack: err?.stack,
       });
       setConnected(false);
       setDetailedError(err);
-    };
-
-    const handleSuspended = () => {
-      console.warn('[Ably] State: SUSPENDED – connection lost, will retry later');
-    };
-
-    const handleClosed = () => {
-      console.log('[Ably] State: CLOSED');
-      setConnected(false);
     };
 
     client.connection.on('connecting', handleConnecting);
     client.connection.on('connected', handleConnected);
     client.connection.on('disconnected', handleDisconnected);
     client.connection.on('failed', handleFailed);
-    client.connection.on('suspended', handleSuspended);
-    client.connection.on('closed', handleClosed);
+    client.connection.on('suspended', () => console.warn('[Ably] State: SUSPENDED'));
+    client.connection.on('closed', () => console.log('[Ably] State: CLOSED'));
 
-    // ---- Канал ----
     const channelName = `set-game-${roomCode}`;
     console.log('[Ably] Creating channel:', channelName);
     const channel = client.channels.get(channelName);
     channelRef.current = channel;
 
     const attachChannel = () => {
-      console.log('[Ably] Attaching channel... current state =', channel.state);
+      console.log('[Ably] Attaching channel... state =', channel.state);
       channel.attach((err) => {
         if (!isMounted) return;
         if (err) {
@@ -150,64 +147,38 @@ export function useAbly(roomCode, playerId, onMessage) {
             statusCode: err.statusCode,
             stack: err.stack,
           });
-          // Повторная попытка через 5 секунд
           setTimeout(attachChannel, 5000);
         } else {
-          console.log('[Ably] Channel attached successfully, state =', channel.state);
+          console.log('[Ably] Channel attached successfully');
         }
       });
     };
     attachChannel();
 
-    // Обработчики событий канала
-    channel.on('attached', () => {
-      console.log('[Ably] Channel event: attached');
-    });
-    channel.on('detached', () => {
-      console.warn('[Ably] Channel event: detached, reattaching...');
-      if (client.connection.state === 'connected') attachChannel();
-    });
-    channel.on('suspended', () => {
-      console.warn('[Ably] Channel event: suspended, reattaching...');
-      attachChannel();
-    });
-    channel.on('failed', (err) => {
-      console.error('[Ably] Channel event: failed', err);
-    });
-    channel.on('update', (msg) => {
-      console.log('[Ably] Channel update:', msg);
-    });
+    channel.on('attached', () => console.log('[Ably] Channel event: attached'));
+    channel.on('detached', () => console.warn('[Ably] Channel detached, reattaching...'));
+    channel.on('suspended', () => console.warn('[Ably] Channel suspended, reattaching...'));
+    channel.on('failed', (err) => console.error('[Ably] Channel failed', err));
 
-    // Подписка на сообщения (только от других клиентов)
     channel.subscribe((msg) => {
       console.log('[Ably] Message received:', {
         name: msg.name,
         clientId: msg.clientId,
         data: msg.data,
-        timestamp: msg.timestamp,
       });
       if (msg.clientId !== playerId) {
         onMessage(msg.name, msg.data);
-      } else {
-        console.log('[Ably] Ignoring own message');
       }
     });
 
-    // ---- Дополнительный мониторинг сетевых событий браузера ----
     const handleOnline = () => {
       console.log('[Ably] Browser online event');
-      if (client.connection.state !== 'connected') {
-        console.log('[Ably] Attempting to reconnect due to online event');
-        client.connect();
-      }
+      if (client.connection.state !== 'connected') client.connect();
     };
-    const handleOffline = () => {
-      console.log('[Ably] Browser offline event');
-    };
+    const handleOffline = () => console.log('[Ably] Browser offline event');
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // ---- Cleanup ----
     return () => {
       isMounted = false;
       console.log('[Ably] Cleaning up...');
@@ -227,29 +198,17 @@ export function useAbly(roomCode, playerId, onMessage) {
   const publish = useCallback((event, data) => {
     const channel = channelRef.current;
     if (!channel) {
-      console.warn('[Ably] publish: no channel (not initialized)');
+      console.warn('[Ably] publish: no channel');
       return;
     }
-
     console.log('[Ably] Publishing:', { event, data, channelState: channel.state });
-
     const doPublish = () => {
       channel.publish(event, data, (err) => {
-        if (err) {
-          console.error('[Ably] Publish error:', {
-            event,
-            error: err.message,
-            code: err.code,
-            statusCode: err.statusCode,
-          });
-        } else {
-          console.log('[Ably] Published successfully:', event);
-        }
+        if (err) console.error('[Ably] Publish error:', err);
+        else console.log('[Ably] Published successfully:', event);
       });
     };
-
     if (channel.state !== 'attached') {
-      console.log('[Ably] Channel not attached, waiting for attached event...');
       channel.once('attached', () => {
         console.log('[Ably] Channel now attached, publishing...');
         doPublish();
