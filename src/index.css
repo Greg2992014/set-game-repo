@@ -224,14 +224,22 @@ body {
 /* ===== STATUS ===== */
 .status-bar {
   text-align: center;
-  padding: 6px 12px;
-  font-size: .88rem;
-  color: var(--muted);
-  transition: color .2s;
+  padding: 12px 16px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface2);
+  border-radius: 12px;
+  margin: 8px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: all .2s;
   flex-shrink: 0;
-  min-height: 28px;
 }
-.status-bar.penalty { color: var(--red); font-weight: 600; }
+.status-bar.penalty {
+  background: rgba(239,68,68,0.2);
+  color: var(--red);
+  border-left: 4px solid var(--red);
+}
 
 /* ===== BOARD ===== */
 .board-wrap {
@@ -244,15 +252,19 @@ body {
 
 .board {
   display: grid;
-  grid-template-columns: repeat(var(--cols, 4), 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
   width: 100%;
   max-width: 900px;
+  margin: 0 auto;
 }
 
 /* ===== CARD ===== */
 .card {
   aspect-ratio: 5/7;
+  width: 100%;
+  max-width: 140px;
+  margin: 0 auto;
   background: var(--surface);
   border: 2px solid var(--border);
   border-radius: var(--card-radius);
@@ -433,14 +445,30 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 
 /* ===== RESPONSIVE ===== */
+/* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
-  .board { gap: 7px; }
-  .card { padding: 7px 5px; border-radius: 10px; }
-  .shapes { gap: 4px; width: 75%; }
+  .card { max-width: 100px; }
+  .shapes { gap: 3px; width: 70%; }
   .scoreboard { gap: 8px; }
   .player-score { min-width: 70px; padding: 6px 10px; }
   .p-pts { font-size: 1.3rem; }
   .timer-val { font-size: 1.1rem; }
   .controls { gap: 8px; }
   .btn { padding: 10px 14px; font-size: .85rem; }
+}
+
+/* Для экранов меньше 900px — 3 колонки */
+@media (max-width: 900px) {
+  .board {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;}
+  }
+
+/* Для экранов меньше 700px — 2 колонки (удобно на телефонах) */
+@media (max-width: 700px) {
+  .board {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;}
+}
+
+/* Для очень маленьких экранов (< 480px) — 1 колонка (опционально) */
+@media (max-width: 480px) {
+  .board {grid-template-columns: repeat(2, minmax(0, 1fr)); /* или 1, но 2 влезает */
+  }
 }
