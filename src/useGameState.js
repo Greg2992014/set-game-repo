@@ -67,23 +67,7 @@ export function useGameState(playerId, publish = null) {
     setTimeout(() => setFlash(null), 700);
   };
 
-  // Выбор карты
-  const toggleCard = useCallback((cardId) => {
-    if (lockedRef.current) return;
-    setSelected(prev => {
-      if (prev.includes(cardId)) return prev.filter(id => id !== cardId);
-      if (prev.length >= 3) return prev;
-      const next = [...prev, cardId];
-
-      // Если выбрано 3 — проверяем
-      if (next.length === 3) {
-        setTimeout(() => trySubmitSet(next), 50);
-      }
-      return next;
-    });
-  }, []);
-
-  // Попытка отправить сет
+    // Попытка отправить сет
   const trySubmitSet = useCallback((ids) => {
     setGs(prev => {
       console.log('[DIAG] trySubmitSet called, playerId:', playerId, 'ids:', ids);
@@ -159,6 +143,22 @@ export function useGameState(playerId, publish = null) {
       }
     });
   }, [playerId, publish]);
+
+  // Выбор карты
+  const toggleCard = useCallback((cardId) => {
+    if (lockedRef.current) return;
+    setSelected(prev => {
+      if (prev.includes(cardId)) return prev.filter(id => id !== cardId);
+      if (prev.length >= 3) return prev;
+      const next = [...prev, cardId];
+
+      // Если выбрано 3 — проверяем
+      if (next.length === 3) {
+        setTimeout(() => trySubmitSet(next), 50);
+      }
+      return next;
+    });
+  }, [trySubmitSet]);
 
   // Добавить 3 карты (только если нет сета)
   const addThreeCards = useCallback(() => {
