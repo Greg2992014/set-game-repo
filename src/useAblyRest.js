@@ -31,7 +31,7 @@ export function useAblyRest(roomCode, playerId, onMessage) {
       httpMaxRetryDuration: 60000,
       fallbackHosts: [],
     });
-    
+
     clientRef.current = client;
     const channel = client.channels.get(`set-game-${roomCode}`);
     channelRef.current = channel;
@@ -65,7 +65,7 @@ export function useAblyRest(roomCode, playerId, onMessage) {
       }
     };
 
-    intervalRef.current = setInterval(poll, 2000);
+    intervalRef.current = setInterval(poll, 1000);
     poll(); // сразу первый опрос
 
     return () => {
