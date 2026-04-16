@@ -1,5 +1,5 @@
 import React from 'react';
-
+ 
 export default function RulesModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
