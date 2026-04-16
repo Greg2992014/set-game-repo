@@ -1,3 +1,5 @@
+import { useState, useRef, useCallback, useEffect } from 'react';
+
 export function useGameState(playerId, publish = null) {
   console.log('[DIAG] useGameState hook, playerId:', playerId, 'publish:', !!publish);
   const [gs, setGs] = useState(null);
