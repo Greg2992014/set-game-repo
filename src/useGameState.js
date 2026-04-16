@@ -86,7 +86,9 @@ export function useGameState(playerId, publish = null) {
   // Попытка отправить сет
   const trySubmitSet = useCallback((ids) => {
     setGs(prev => {
+      console.log('[DIAG] trySubmitSet called, playerId:', playerId, 'ids:', ids);
       if (!prev || prev.gameOver) return prev;
+      console.log('[DIAG] prev.scores:', prev.scores);
 
       const cards = ids.map(id => deserializeCard(id));
       const board = deserializeCards(prev.boardIds);
@@ -98,7 +100,9 @@ export function useGameState(playerId, publish = null) {
         return prev;
       }
 
+      console.log('[DIAG] cards objects:', cards);
       const valid = isValidSet(cards[0], cards[1], cards[2]);
+      console.log('[DIAG] valid set?', valid);
 
       if (valid) {
         // Убираем карты, добавляем из колоды
@@ -111,6 +115,7 @@ export function useGameState(playerId, publish = null) {
         const now = Date.now();
         const setTime = Math.floor((now - prev.lastSetTime) / 1000);
         const newScores = { ...prev.scores, [playerId]: (prev.scores[playerId] || 0) + 1 };
+        console.log('[DIAG] newScores:', newScores, 'playerId used:', playerId);
         const newSetTimes = {
           ...prev.setTimes,
           [playerId]: [...(prev.setTimes[playerId] || []), setTime],
@@ -137,6 +142,7 @@ export function useGameState(playerId, publish = null) {
 
       } else {
         // Ошибка — блокируем до следующего правильного сета партнёра
+        console.log('[DIAG] invalid set, errors increment for playerId:', playerId);
         showFlash(ids, 'incorrect');
         setSelected([]);
 
