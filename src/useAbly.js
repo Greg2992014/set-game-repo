@@ -16,80 +16,88 @@ export function useAbly(roomCode, playerId, onMessage) {
     }
 
     let isMounted = true;
-    let attachAttempts = 0;
+    let retryCount = 0;
 
-    // Только HTTP polling (надёжнее на мобильных сетях)
+    // Конфигурация с WebSocket и fallback-хостами
     const client = new Ably.Realtime({
       key: ABLY_KEY,
       clientId: playerId,
-      transports: ['xhr_polling'], // отключаем WebSocket
-      timeout: 30000,
-      realtimeRequestTimeout: 30000,
-      disconnectedRetryTimeout: 5000,
-      suspendedRetryTimeout: 15000,
+      transports: ['web_socket', 'xhr_polling'],
+      fallbackHosts: ['a.ably-realtime.com', 'b.ably-realtime.com', 'c.ably-realtime.com'],
+      timeout: 20000,
+      realtimeRequestTimeout: 20000,
+      disconnectedRetryTimeout: 3000,
+      suspendedRetryTimeout: 10000,
+      httpMaxRetryCount: 5,
       connectivityCheckUrl: null,
+      autoConnect: true,
+      queueMessages: true,
     });
 
     clientRef.current = client;
 
-    client.connection.on('connecting', () => {
-      console.log('[Ably] connecting...');
-    });
-
-    client.connection.on('connected', () => {
+    const handleConnected = () => {
       if (!isMounted) return;
       console.log('[Ably] connected');
       setConnected(true);
-      attachAttempts = 0;
+      retryCount = 0;
       if (channelRef.current && channelRef.current.state !== 'attached') {
         channelRef.current.attach();
       }
-    });
+    };
 
-    client.connection.on('disconnected', (reason) => {
+    const handleDisconnected = (reason) => {
       if (!isMounted) return;
       console.log('[Ably] disconnected', reason);
       setConnected(false);
-    });
+      // Автоматическая попытка переподключения
+      if (retryCount < 5) {
+        setTimeout(() => {
+          if (isMounted && client.connection.state !== 'connected') {
+            client.connect();
+          }
+        }, 3000 * Math.pow(1.5, retryCount));
+        retryCount++;
+      }
+    };
 
-    client.connection.on('failed', (err) => {
+    const handleFailed = (err) => {
       if (!isMounted) return;
       console.error('[Ably] connection failed', err);
       setConnected(false);
-    });
+    };
+
+    client.connection.on('connected', handleConnected);
+    client.connection.on('disconnected', handleDisconnected);
+    client.connection.on('failed', handleFailed);
 
     const channel = client.channels.get(`set-game-${roomCode}`);
     channelRef.current = channel;
 
-    const attachWithRetry = () => {
+    const attachChannel = () => {
       channel.attach((err) => {
         if (!isMounted) return;
         if (err) {
-          attachAttempts++;
-          const delay = Math.min(3000 * Math.pow(1.5, attachAttempts), 30000);
-          console.error(`[Ably] attach error (attempt ${attachAttempts}), retry in ${delay}ms`, err);
-          setTimeout(attachWithRetry, delay);
+          console.error('[Ably] channel attach error', err);
+          setTimeout(attachChannel, 5000);
         } else {
           console.log('[Ably] channel attached');
-          attachAttempts = 0;
         }
       });
     };
 
-    attachWithRetry();
+    attachChannel();
 
     channel.on('detached', () => {
       if (!isMounted) return;
       console.warn('[Ably] channel detached, reattaching');
-      if (client.connection.state === 'connected') {
-        attachWithRetry();
-      }
+      if (client.connection.state === 'connected') attachChannel();
     });
 
     channel.on('suspended', () => {
       if (!isMounted) return;
       console.warn('[Ably] channel suspended, reattaching');
-      attachWithRetry();
+      attachChannel();
     });
 
     channel.subscribe((msg) => {
