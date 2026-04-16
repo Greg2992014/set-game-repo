@@ -422,6 +422,21 @@ body {
   margin: 10px 0;
 }
 
+.btn-switch {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+.btn-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .rules-box { max-width: 520px; }
 
 /* ===== LOADING ===== */

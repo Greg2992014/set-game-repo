@@ -8,6 +8,15 @@ export default function Lobby({ onStart }) {
   const [mode, setMode] = useState(null); // 'solo' | 'create' | 'join'
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [connectionType, setConnectionType] = useState(() => {
+    return localStorage.getItem('ablyConnectionType') === 'websocket' ? 'websocket' : 'rest';
+  });
+
+  const handleConnectionChange = (type) => {
+    localStorage.setItem('ablyConnectionType', type);
+    setConnectionType(type);
+    window.location.reload();
+  };
   const [generated, setGenerated] = useState('');
 
   const handleCreate = () => {
@@ -45,6 +54,27 @@ export default function Lobby({ onStart }) {
             onChange={e => setName(e.target.value)}
             maxLength={16}
           />
+        </div>
+        <div className="connection-switch" style={{ marginBottom: '10px', textAlign: 'center' }}>
+          <span style={{ marginRight: '8px' }}>Соединение:</span>
+          <button 
+            className={`btn-switch ${connectionType === 'rest' ? 'active' : ''}`}
+            onClick={() => handleConnectionChange('rest')}
+            style={{ marginRight: '4px' }}
+          >
+            REST
+          </button>
+          <button 
+            className={`btn-switch ${connectionType === 'websocket' ? 'active' : ''}`}
+            onClick={() => handleConnectionChange('websocket')}
+          >
+            WebSocket
+          </button>
+          <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: '4px' }}>
+            {connectionType === 'websocket' 
+              ? '⚡ Мгновенно, но может блокироваться оператором' 
+              : '🐢 Надёжно, но с задержкой ~1с'}
+          </div>
         </div>
 
         {!mode && (

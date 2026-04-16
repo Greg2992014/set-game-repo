@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Lobby from './Lobby.jsx';
 import Card from './Card.jsx';
 import GameOver from './GameOver.jsx';
 import RulesModal from './RulesModal.jsx';
 import { useGameState } from './useGameState.js';
-// import { useAbly } from './useAbly.js';
+import { useAbly } from './useAbly.js';
 import { useAblyRest } from './useAblyRest.js';
 import { deserializeCards, hasSetOnBoard } from './deck.js';
 
@@ -16,47 +16,67 @@ export default function App() {
   const [partnerReady, setPartnerReady] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
+  // Рефы для доступа к функциям из useGameState до их определения
+  const initGameRef = useRef(null);
+  const applyRemoteStateRef = useRef(null);
+
+  // Переключатель WebSocket/REST (из localStorage)
+  const useWebSocket = (() => {
+    const saved = localStorage.getItem('ablyConnectionType');
+    return saved === 'websocket';
+  })();
+
+  // handleRemoteMessage будет определён позже, после получения publish? Нет, он нужен для выбора хука.
+  // Поэтому определим его сейчас с пустыми заглушками, но он будет использовать рефы, которые заполнятся после useGameState.
+  // Это нормально, потому что колбэк будет вызван только после того, как рефы уже будут заполнены.
   const handleRemoteMessage = useCallback((event, data) => {
     console.log('[DIAG] handleRemoteMessage', event, data);
     if (event === 'state') {
-      applyRemoteState(data);
+      applyRemoteStateRef.current?.(data);
     } else if (event === 'name') {
       setNames(prev => ({ ...prev, [data.playerId]: data.name }));
       setPartnerReady(true);
     } else if (event === 'new_game') {
-      initGame();
+      initGameRef.current?.();
     }
   }, []);
 
-  // const { connected, publish } = useAbly(
-  //   session?.mode === 'multi' ? session.roomCode : null,
-  //   session?.playerId,
-  //   handleRemoteMessage
-  // );
-  const { connected, publish } = useAblyRest(
-  session?.mode === 'multi' ? session.roomCode : null,
-  session?.playerId,
-  handleRemoteMessage
-  );
-  console.log('[DIAG] Ably connected:', connected);
+  // Выбор транспорта (WebSocket или REST)
+  const { connected, publish } = useWebSocket
+    ? useAbly(
+        session?.mode === 'multi' ? session.roomCode : null,
+        session?.playerId,
+        handleRemoteMessage
+      )
+    : useAblyRest(
+        session?.mode === 'multi' ? session.roomCode : null,
+        session?.playerId,
+        handleRemoteMessage
+      );
 
   const publishFn = session?.mode === 'multi' ? publish : null;
 
+  // Единственный вызов useGameState – после получения publish
   const {
     gs, selected, hint, flash, locked, currentTime, formatTime,
     initGame, applyRemoteState, toggleCard, addThreeCards, showHint, getStats,
   } = useGameState(session?.playerId, publishFn);
   console.log('[DIAG] gameState gs:', gs ? 'exists' : 'null');
 
+  // Сохраняем функции в рефы для handleRemoteMessage
+  initGameRef.current = initGame;
+  applyRemoteStateRef.current = applyRemoteState;
+
+  // handleStart использует initGameRef
   const handleStart = useCallback((cfg) => {
     console.log('[DIAG] handleStart', cfg);
     setSession(cfg);
     setNames({ [cfg.playerId]: cfg.name });
     setPartnerReady(cfg.mode === 'solo');
     if (cfg.mode === 'solo') {
-      initGame();  // ← добавьте эту строку
+      initGameRef.current?.();
     }
-  }, [initGame]);  // ← добавьте зависимость initGame
+  }, []);
 
   useEffect(() => {
     console.log('[DIAG] useEffect [connected, session]', { connected, session });
@@ -66,12 +86,12 @@ export default function App() {
     if (session.role === 'host') {
       console.log('[DIAG] host: will init game');
       setTimeout(() => {
-        const state = initGame();
+        const state = initGameRef.current?.();
         console.log('[DIAG] host: game initialized', state);
         setTimeout(() => publish('state', state), 500);
       }, 800);
     }
-  }, [connected, session]);
+  }, [connected, session, publish]);
 
   useEffect(() => {
     if (!session || session.mode !== 'multi' || !gs) return;
@@ -79,7 +99,7 @@ export default function App() {
       console.log('[DIAG] guest publishing name');
       publish('name', { playerId: session.playerId, name: session.name });
     }
-  }, [gs, session]);
+  }, [gs, session, publish, partnerReady]);
 
   useEffect(() => {
     if (!gs) return;
@@ -97,7 +117,7 @@ export default function App() {
   const handleNewGame = () => {
     console.log('[DIAG] handleNewGame');
     if (session?.mode === 'multi') publish('new_game', {});
-    initGame();
+    initGameRef.current?.(); // используем реф
   };
 
   const handleLobby = () => {
