@@ -253,7 +253,7 @@ body {
 .board {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;   /* было 12px */
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
@@ -445,10 +445,20 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 
 /* ===== RESPONSIVE ===== */
-/* ===== RESPONSIVE ===== */
+/* Для экранов меньше 900px — 3 колонки, меньший отступ */
+@media (max-width: 900px) {
+  .board {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;}
+}
+
+/* Для экранов меньше 700px — 3 колонки (если влезают) и совсем маленький отступ */
+@media (max-width: 700px) {
+  .board {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;}
+}
+
 @media (max-width: 600px) {
-  .card { max-width: 100px; }
-  .shapes { gap: 3px; width: 70%; }
+  .board {gap: 5px;}
+  .card {max-width: 100px; padding: 6px 4px;}
+  .shapes {gap: 3px; width: 70%;}
   .scoreboard { gap: 8px; }
   .player-score { min-width: 70px; padding: 6px 10px; }
   .p-pts { font-size: 1.3rem; }
@@ -457,18 +467,7 @@ body {
   .btn { padding: 10px 14px; font-size: .85rem; }
 }
 
-/* Для экранов меньше 900px — 3 колонки */
-@media (max-width: 900px) {
-  .board {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;}
-  }
-
-/* Для экранов меньше 700px — 2 колонки (удобно на телефонах) */
-@media (max-width: 700px) {
-  .board {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;}
-}
-
-/* Для очень маленьких экранов (< 480px) — 1 колонка (опционально) */
-@media (max-width: 480px) {
-  .board {grid-template-columns: repeat(2, minmax(0, 1fr)); /* или 1, но 2 влезает */
-  }
+/* Для экранов меньше 550px — 2 колонки, чтобы карты не были слишком мелкими */
+@media (max-width: 550px) {
+  .board {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;}
 }
