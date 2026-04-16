@@ -26,11 +26,12 @@ export function useAblyRest(roomCode, playerId, onMessage) {
     console.log('[AblyRest] Initializing with long timeouts (120s)');
     const client = new Ably.Rest({
       key: ABLY_KEY,
-      timeout: 120000,               // 2 минуты на запрос
+      timeout: 120000,
       httpMaxRetryCount: 3,
       httpMaxRetryDuration: 60000,
-      fallbackHosts: [],             // отключаем fallback
+      fallbackHosts: [],
     });
+    
     clientRef.current = client;
     const channel = client.channels.get(`set-game-${roomCode}`);
     channelRef.current = channel;
