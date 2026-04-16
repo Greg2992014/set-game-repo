@@ -1,0 +1,73 @@
+// src/useAblyRest.js
+import { useEffect, useRef, useState, useCallback } from 'react';
+import Ably from 'ably';
+
+const ABLY_KEY = import.meta.env.VITE_ABLY_KEY;
+
+export function useAblyRest(roomCode, playerId, onMessage) {
+  const [connected, setConnected] = useState(false);
+  const clientRef = useRef(null);
+  const channelRef = useRef(null);
+  const intervalRef = useRef(null);
+  const lastProcessedRef = useRef({}); // для дедупликации сообщений
+
+  useEffect(() => {
+    if (!roomCode) return;
+    if (!ABLY_KEY) {
+      console.error('[AblyRest] No API key');
+      return;
+    }
+
+    let isMounted = true;
+    const client = new Ably.Rest({ key: ABLY_KEY });
+    clientRef.current = client;
+    const channel = client.channels.get(`set-game-${roomCode}`);
+    channelRef.current = channel;
+    setConnected(true);
+    console.log('[AblyRest] Connected (REST mode)');
+
+    const poll = async () => {
+      if (!isMounted) return;
+      try {
+        const history = await channel.history({ limit: 20, direction: 'forwards' });
+        const messages = history.items || [];
+        for (const msg of messages) {
+          const msgKey = `${msg.timestamp}-${msg.clientId}-${msg.name}`;
+          if (lastProcessedRef.current[msgKey]) continue;
+          lastProcessedRef.current[msgKey] = true;
+          if (msg.clientId !== playerId) {
+            console.log('[AblyRest] Received:', msg.name, msg.data);
+            onMessage(msg.name, msg.data);
+          }
+        }
+        // Очистка старых ключей (чтобы не раздувать память)
+        const keys = Object.keys(lastProcessedRef.current);
+        if (keys.length > 100) {
+          const toDelete = keys.slice(0, keys.length - 50);
+          toDelete.forEach(k => delete lastProcessedRef.current[k]);
+        }
+      } catch (err) {
+        console.error('[AblyRest] Poll error:', err);
+      }
+    };
+
+    intervalRef.current = setInterval(poll, 2000);
+    poll(); // сразу первый опрос
+
+    return () => {
+      isMounted = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      clientRef.current = null;
+    };
+  }, [roomCode, playerId, onMessage]);
+
+  const publish = useCallback((event, data) => {
+    if (!channelRef.current) return;
+    channelRef.current.publish(event, data, (err) => {
+      if (err) console.error('[AblyRest] Publish error:', err);
+      else console.log('[AblyRest] Published:', event);
+    });
+  }, []);
+
+  return { connected, publish };
+}

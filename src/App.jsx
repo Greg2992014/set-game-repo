@@ -4,7 +4,8 @@ import Card from './Card.jsx';
 import GameOver from './GameOver.jsx';
 import RulesModal from './RulesModal.jsx';
 import { useGameState } from './useGameState.js';
-import { useAbly } from './useAbly.js';
+// import { useAbly } from './useAbly.js';
+import { useAblyRest } from './useAblyRest.js';
 import { deserializeCards, hasSetOnBoard } from './deck.js';
 
 export default function App() {
@@ -27,10 +28,15 @@ export default function App() {
     }
   }, []);
 
-  const { connected, publish } = useAbly(
-    session?.mode === 'multi' ? session.roomCode : null,
-    session?.playerId,
-    handleRemoteMessage
+  // const { connected, publish } = useAbly(
+  //   session?.mode === 'multi' ? session.roomCode : null,
+  //   session?.playerId,
+  //   handleRemoteMessage
+  // );
+  const { connected, publish } = useAblyRest(
+  session?.mode === 'multi' ? session.roomCode : null,
+  session?.playerId,
+  handleRemoteMessage
   );
   console.log('[DIAG] Ably connected:', connected);
 
