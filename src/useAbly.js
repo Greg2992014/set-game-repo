@@ -16,75 +16,80 @@ export function useAbly(roomCode, playerId, onMessage) {
     }
 
     let isMounted = true;
+    let attachAttempts = 0;
 
+    // Только HTTP polling (надёжнее на мобильных сетях)
     const client = new Ably.Realtime({
       key: ABLY_KEY,
       clientId: playerId,
-      transports: ['web_socket', 'xhr_polling'],
-      timeout: 20000,                      // увеличен
-      realtimeRequestTimeout: 20000,       // увеличен
+      transports: ['xhr_polling'], // отключаем WebSocket
+      timeout: 30000,
+      realtimeRequestTimeout: 30000,
       disconnectedRetryTimeout: 5000,
-      suspendedRetryTimeout: 15000,        // увеличен
+      suspendedRetryTimeout: 15000,
       connectivityCheckUrl: null,
     });
 
     clientRef.current = client;
 
-    const handleConnected = () => {
+    client.connection.on('connecting', () => {
+      console.log('[Ably] connecting...');
+    });
+
+    client.connection.on('connected', () => {
       if (!isMounted) return;
       console.log('[Ably] connected');
       setConnected(true);
-      // Принудительно прикрепляем канал, если ещё не прикреплён
+      attachAttempts = 0;
       if (channelRef.current && channelRef.current.state !== 'attached') {
         channelRef.current.attach();
       }
-    };
+    });
 
-    const handleDisconnected = () => {
+    client.connection.on('disconnected', (reason) => {
       if (!isMounted) return;
-      console.log('[Ably] disconnected');
+      console.log('[Ably] disconnected', reason);
       setConnected(false);
-    };
+    });
 
-    const handleFailed = (err) => {
+    client.connection.on('failed', (err) => {
       if (!isMounted) return;
       console.error('[Ably] connection failed', err);
       setConnected(false);
-    };
-
-    client.connection.on('connected', handleConnected);
-    client.connection.on('disconnected', handleDisconnected);
-    client.connection.on('failed', handleFailed);
+    });
 
     const channel = client.channels.get(`set-game-${roomCode}`);
     channelRef.current = channel;
 
-    const attachChannel = (retryDelay = 3000) => {
+    const attachWithRetry = () => {
       channel.attach((err) => {
         if (!isMounted) return;
         if (err) {
-          console.error('[Ably] channel attach error', err);
-          setTimeout(() => attachChannel(retryDelay * 1.5), retryDelay);
+          attachAttempts++;
+          const delay = Math.min(3000 * Math.pow(1.5, attachAttempts), 30000);
+          console.error(`[Ably] attach error (attempt ${attachAttempts}), retry in ${delay}ms`, err);
+          setTimeout(attachWithRetry, delay);
         } else {
           console.log('[Ably] channel attached');
+          attachAttempts = 0;
         }
       });
     };
 
-    attachChannel();
+    attachWithRetry();
 
-    channel.on('detached', (stateChange) => {
+    channel.on('detached', () => {
       if (!isMounted) return;
-      console.warn('[Ably] channel detached', stateChange.reason);
+      console.warn('[Ably] channel detached, reattaching');
       if (client.connection.state === 'connected') {
-        attachChannel();
+        attachWithRetry();
       }
     });
 
-    channel.on('suspended', (stateChange) => {
+    channel.on('suspended', () => {
       if (!isMounted) return;
-      console.warn('[Ably] channel suspended', stateChange.reason);
-      attachChannel();
+      console.warn('[Ably] channel suspended, reattaching');
+      attachWithRetry();
     });
 
     channel.subscribe((msg) => {
@@ -101,31 +106,32 @@ export function useAbly(roomCode, playerId, onMessage) {
         channelRef.current.detach();
       }
       if (clientRef.current) {
-        clientRef.current.off(); // отписываемся от событий
+        clientRef.current.connection.off();
         clientRef.current.close();
       }
     };
   }, [roomCode, playerId, onMessage]);
-  
+
   const publish = useCallback((event, data) => {
     const channel = channelRef.current;
     if (!channel) {
       console.warn('[Ably] publish: no channel');
       return;
     }
-    // Проверяем, что канал в состоянии attached, иначе ждём
+
+    const doPublish = () => {
+      channel.publish(event, data, (err) => {
+        if (err) console.error('[Ably] publish error', err);
+      });
+    };
+
     if (channel.state !== 'attached') {
       console.log('[Ably] channel not attached, waiting...');
-      channel.once('attached', () => {
-        channel.publish(event, data);
-      });
-      // Принудительно пытаемся прикрепить
+      channel.once('attached', doPublish);
       channel.attach();
-      return;
+    } else {
+      doPublish();
     }
-    channel.publish(event, data, (err) => {
-      if (err) console.error('[Ably] publish error', err);
-    });
   }, []);
 
   return { connected, publish };
