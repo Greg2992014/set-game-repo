@@ -12,7 +12,10 @@ export function useAblyRest(roomCode, playerId, onMessage) {
   const lastProcessedRef = useRef({});
 
   useEffect(() => {
-    if (!roomCode) return;
+    if (!roomCode) {
+      console.log('[AblyRest] No roomCode, skip');
+      return;
+    }
     if (!ABLY_KEY) {
       console.error('[AblyRest] No API key');
       return;
@@ -20,12 +23,13 @@ export function useAblyRest(roomCode, playerId, onMessage) {
 
     let isMounted = true;
 
+    console.log('[AblyRest] Initializing with long timeouts (120s)');
     const client = new Ably.Rest({
       key: ABLY_KEY,
       timeout: 120000,               // 2 минуты на запрос
       httpMaxRetryCount: 3,
       httpMaxRetryDuration: 60000,
-      fallbackHosts: [],             // отключаем fallback (они только замедляют)
+      fallbackHosts: [],             // отключаем fallback
     });
     clientRef.current = client;
     const channel = client.channels.get(`set-game-${roomCode}`);
@@ -36,8 +40,10 @@ export function useAblyRest(roomCode, playerId, onMessage) {
     const poll = async () => {
       if (!isMounted) return;
       try {
+        console.log('[AblyRest] Polling history...');
         const history = await channel.history({ limit: 20, direction: 'forwards' });
         const messages = history.items || [];
+        console.log(`[AblyRest] Got ${messages.length} messages`);
         for (const msg of messages) {
           const msgKey = `${msg.timestamp}-${msg.clientId}-${msg.name}`;
           if (lastProcessedRef.current[msgKey]) continue;
@@ -58,8 +64,8 @@ export function useAblyRest(roomCode, playerId, onMessage) {
       }
     };
 
-    intervalRef.current = setInterval(poll, 5000); // опрос каждые 5 секунд
-    poll();
+    intervalRef.current = setInterval(poll, 5000);
+    poll(); // сразу первый опрос
 
     return () => {
       isMounted = false;
@@ -69,10 +75,14 @@ export function useAblyRest(roomCode, playerId, onMessage) {
   }, [roomCode, playerId, onMessage]);
 
   const publish = useCallback((event, data) => {
-    if (!channelRef.current) return;
+    if (!channelRef.current) {
+      console.warn('[AblyRest] No channel, cannot publish');
+      return;
+    }
+    console.log('[AblyRest] Publishing:', event);
     channelRef.current.publish(event, data, (err) => {
       if (err) console.error('[AblyRest] Publish error:', err);
-      else console.log('[AblyRest] Published:', event);
+      else console.log('[AblyRest] Published successfully:', event);
     });
   }, []);
 
