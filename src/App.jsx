@@ -47,7 +47,10 @@ export default function App() {
     setSession(cfg);
     setNames({ [cfg.playerId]: cfg.name });
     setPartnerReady(cfg.mode === 'solo');
-  }, []);
+    if (cfg.mode === 'solo') {
+      initGame();  // ← добавьте эту строку
+    }
+  }, [initGame]);  // ← добавьте зависимость initGame
 
   useEffect(() => {
     console.log('[DIAG] useEffect [connected, session]', { connected, session });

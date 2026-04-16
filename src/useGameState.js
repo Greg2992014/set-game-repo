@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createInitialGameState, deserializeCards, isValidSet, hasSetOnBoard, findRandomSet, deserializeCard } from './deck.js';
 
 export function useGameState(playerId, publish = null) {
   console.log('[DIAG] useGameState hook, playerId:', playerId, 'publish:', !!publish);
