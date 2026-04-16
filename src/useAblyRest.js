@@ -64,7 +64,7 @@ export function useAblyRest(roomCode, playerId, onMessage) {
       }
     };
 
-    intervalRef.current = setInterval(poll, 5000);
+    intervalRef.current = setInterval(poll, 2000);
     poll(); // сразу первый опрос
 
     return () => {
